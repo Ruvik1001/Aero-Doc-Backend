@@ -15,7 +15,7 @@ services:
     depends_on:
       - request_manager_service_crm
 
-  request_manager_service_crm:
+  proxy:
     build: ./proxy
     restart: unless-stopped
     container_name: "proxy"
