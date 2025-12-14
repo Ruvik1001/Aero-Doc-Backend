@@ -55,7 +55,7 @@ class MilvusSingleton:
     ## Создадим схему коллекции
     def create_schema(self, size_vec: int) -> CollectionSchema:
         id_field = FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False)
-        source_field = FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255)
+        source_field = FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=32000)
         embedding_field = FieldSchema(name="embeddings", dtype=DataType.FLOAT_VECTOR, dim=size_vec)
         content_field = FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=8192)
 
