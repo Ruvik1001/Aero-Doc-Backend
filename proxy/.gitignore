@@ -1,0 +1,20 @@
+# Кэш pytest
+.pytest_cache/
+*.pytest_cache/
+
+# Временные файлы и директории
+*.pyc
+__pycache__/
+*.swp
+*.egg-info/
+dist/
+build/
+
+# IDE-специфичные файлы
+.vscode/
+.idea/
+
+# логи
+*.log
+
+.env

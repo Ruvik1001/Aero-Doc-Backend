@@ -1,0 +1,21 @@
+services:
+  request_manager_service_crm:
+    build: ./proxy
+    restart: unless-stopped
+    container_name: "proxy"
+    ports:
+      - "127.0.0.1:10000:8080"
+    env_file:
+      - ./proxy/.env
+    volumes:
+      - ./docs:/app/docs
+    networks:
+      - aero_network
+
+#volumes:
+
+networks:
+  aero_network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
