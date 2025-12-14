@@ -135,7 +135,7 @@ def parser(files: List[str]):
             new_records.append(
                 {
                     "id": next_id,
-                    "source": chunk.metadata.get("source", str(file_path)),
+                    "source": chunk.metadata.get("source", str(file_name)),
                     "embeddings": vec,
                     "content": chunk.page_content,
                 }
