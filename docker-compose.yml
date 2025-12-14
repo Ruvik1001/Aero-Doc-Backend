@@ -1,4 +1,20 @@
 services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/ssl:/etc/ssl
+    logging:
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - aero_network
+    depends_on:
+      - request_manager_service_crm
+
   request_manager_service_crm:
     build: ./proxy
     restart: unless-stopped
