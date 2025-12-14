@@ -46,7 +46,9 @@ def giga_answer(query: str, fragments: list[dict]) -> str:
        """
 
        for fragment in fragments:
-          q += f"{fragment.text}\n"
+          # fragments - это список словарей с ключами 'text' и 'source'
+          fragment_text = fragment.get('text', '') if isinstance(fragment, dict) else getattr(fragment, 'text', '')
+          q += f"{fragment_text}\n"
 
        logger.debug("Sending request to GigaChat", extra={"prompt_length": len(q)})
        response = giga.chat(q)

@@ -108,8 +108,22 @@ def parser(files: List[str]):
 
         docs = text_docs.load_pdf_documents(file_path)
         logger.info("PDF loaded, splitting into chunks", extra={"pages_count": len(docs)})
+        
+        # Проверяем, есть ли текст в документах
+        total_text_length = sum(len(doc.page_content) for doc in docs)
+        logger.info("Total text length in PDF", extra={"total_text_length": total_text_length})
+        
+        if total_text_length == 0:
+            logger.warning("PDF contains no text, skipping file", extra={"file_name": file_name})
+            continue
+        
         chunks = text_docs.splitting(docs)
         logger.info("Chunks created, starting vectorization", extra={"chunks_count": len(chunks)})
+        
+        if len(chunks) == 0:
+            logger.warning("No chunks created from PDF, skipping file", extra={"file_name": file_name})
+            continue
+        
         vectors = emb.vectorize_text(chunks)
         logger.info("Vectorization completed")
 
@@ -151,7 +165,16 @@ def parser(files: List[str]):
 
 def push_milv(name_db="rag_db", collec="docs"):
     json_path = Path("files_chunks.json")
+    
+    if not json_path.exists():
+        logger.warning("files_chunks.json not found, skipping Milvus push")
+        return
+    
     rows = json.loads(json_path.read_text(encoding="utf-8"))
+    
+    if not rows or len(rows) == 0:
+        logger.warning("No data in files_chunks.json to push to Milvus")
+        return
 
     milvus = MilvusSingleton(host="standalone", port="19530")
     milvus.setup_database(name_db)
