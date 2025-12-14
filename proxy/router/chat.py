@@ -2,11 +2,11 @@ import os
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 from starlette.responses import FileResponse
 
 from proxy.utils.giga import giga_answer
-from proxy.utils.search import poisk
+from proxy.utils.search import poisk, parser
 
 from proxy.schema.chat import Chat, ChatResponse, FileDownload, FileUploadResponse
 
@@ -100,7 +100,10 @@ async def downloadDoc(doc: FileDownload) -> FileResponse:
             )
             raise HTTPException(status_code=400, detail="Invalid file name")
 
-        file_path = DOC_DIR / (doc.docName + ".pdf")
+        if (".pdf" not in doc.docName) and (".PDF" not in doc.docName):
+            doc.docName += ".pdf"
+
+        file_path = DOC_DIR / doc.docName
         logger.debug(
             "Constructed file path",
             extra={
@@ -152,7 +155,7 @@ async def downloadDoc(doc: FileDownload) -> FileResponse:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/upload", response_model=FileUploadResponse)
-async def uploadDoc(file: UploadFile = File(...)) -> FileUploadResponse:
+async def uploadDoc(background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> FileUploadResponse:
     logger.info(
         "Received document upload request",
         extra={
@@ -228,9 +231,13 @@ async def uploadDoc(file: UploadFile = File(...)) -> FileUploadResponse:
         # Сохраняем файл
         with open(file_path, "wb") as f:
             f.write(file_content)
+
+        # Обработку файла (парсинг и векторизация) выполняем в фоне
+        # чтобы не блокировать ответ пользователю
+        background_tasks.add_task(parser, [safe_filename])
         
         logger.info(
-            "Document uploaded successfully",
+            "Document uploaded successfully, processing started in background",
             extra={
                 "file_name": safe_filename,
                 "file_path": str(file_path),
@@ -240,7 +247,7 @@ async def uploadDoc(file: UploadFile = File(...)) -> FileUploadResponse:
         
         return FileUploadResponse(
             success=True,
-            message="Document uploaded successfully",
+            message="Document uploaded successfully. Processing started in background.",
             filename=safe_filename,
             file_path=str(file_path)
         )
