@@ -6,10 +6,6 @@ COPY requirements.txt .
 
 RUN mkdir -p ./docs
 
-COPY 1.pdf ./docs/
-
-COPY 2.pdf ./docs/
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . ./proxy

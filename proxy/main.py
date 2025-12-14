@@ -1,10 +1,11 @@
-from sys import prefix
+import time
 
 from fastapi import FastAPI, Request
 from dotenv import load_dotenv
 import os
 
 from starlette.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 load_dotenv()
 
@@ -38,6 +39,56 @@ def setup_logging():
     logger.addHandler(console_handler)
 
 
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        logger = logging.getLogger(__name__)
+        
+        # Логируем входящий запрос
+        logger.info(
+            "Incoming request",
+            extra={
+                "service": "request_manager_service",
+                "method": request.method,
+                "endpoint": str(request.url.path),
+                "client_ip": request.client.host if request.client else None,
+            }
+        )
+        
+        try:
+            response = await call_next(request)
+            duration = time.time() - start_time
+            
+            # Логируем успешный ответ
+            logger.info(
+                "Request completed",
+                extra={
+                    "service": "request_manager_service",
+                    "method": request.method,
+                    "endpoint": str(request.url.path),
+                    "status_code": response.status_code,
+                    "duration_sec": round(duration, 3),
+                }
+            )
+            
+            return response
+        except Exception as e:
+            duration = time.time() - start_time
+            logger.error(
+                "Request failed",
+                extra={
+                    "service": "request_manager_service",
+                    "method": request.method,
+                    "endpoint": str(request.url.path),
+                    "status_code": 500,
+                    "duration_sec": round(duration, 3),
+                    "error": str(e),
+                },
+                exc_info=True
+            )
+            raise
+
+
 def create_app() -> FastAPI:
     setup_logging()
 
@@ -47,6 +98,8 @@ def create_app() -> FastAPI:
         redoc_url="/redoc"
     )
 
+    app.add_middleware(LoggingMiddleware)
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
