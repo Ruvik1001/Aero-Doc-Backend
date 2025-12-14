@@ -1,6 +1,7 @@
 import os
 import logging
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 from starlette.responses import FileResponse
@@ -155,101 +156,116 @@ async def downloadDoc(doc: FileDownload) -> FileResponse:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/upload", response_model=FileUploadResponse)
-async def uploadDoc(background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> FileUploadResponse:
+async def uploadDoc(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)) -> FileUploadResponse:
     logger.info(
         "Received document upload request",
         extra={
-            "file_name": file.filename,
-            "content_type": file.content_type,
+            "files_count": len(files),
             "endpoint": "/upload"
         }
     )
     
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
     try:
-        # Валидация типа файла
-        if file.content_type != "application/pdf":
-            logger.warning(
-                "Invalid file type",
-                extra={
-                    "file_name": file.filename,
-                    "content_type": file.content_type
-                }
-            )
-            raise HTTPException(
-                status_code=400, 
-                detail="Only PDF files are allowed"
-            )
-        
-        # Валидация имени файла
-        if not file.filename:
-            logger.warning("Empty filename provided")
-            raise HTTPException(status_code=400, detail="Filename is required")
-        
-        # Очистка имени файла от опасных символов
-        safe_filename = file.filename.replace("..", "").replace("/", "").replace("\\", "")
-        if not safe_filename or safe_filename != file.filename:
-            logger.warning(
-                "Invalid characters in filename",
-                extra={
-                    "original_filename": file.filename,
-                    "safe_filename": safe_filename
-                }
-            )
-            raise HTTPException(status_code=400, detail="Invalid file name")
-        
-        # Убеждаемся, что файл имеет расширение .pdf
-        if not safe_filename.lower().endswith('.pdf'):
-            safe_filename = safe_filename.rsplit('.', 1)[0] + '.pdf'
-        
-        file_path = DOC_DIR / safe_filename
-        
-        # Проверка размера файла
-        file_content = await file.read()
-        file_size = len(file_content)
-        
-        if file_size > MAX_FILE_SIZE:
-            logger.warning(
-                "File size exceeds limit",
-                extra={
-                    "file_name": safe_filename,
-                    "file_size": file_size,
-                    "max_size": MAX_FILE_SIZE
-                }
-            )
-            raise HTTPException(
-                status_code=400,
-                detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024):.0f} MB"
-            )
-        
-        if file_size == 0:
-            logger.warning("Empty file uploaded", extra={"file_name": safe_filename})
-            raise HTTPException(status_code=400, detail="File is empty")
+        safe_filenames = []
+        saved_files = []
         
         # Создаем директорию, если её нет
         DOC_DIR.mkdir(parents=True, exist_ok=True)
         
-        # Сохраняем файл
-        with open(file_path, "wb") as f:
-            f.write(file_content)
-
-        # Обработку файла (парсинг и векторизация) выполняем в фоне
-        # чтобы не блокировать ответ пользователю
-        background_tasks.add_task(parser, [safe_filename])
-        
-        logger.info(
-            "Document uploaded successfully, processing started in background",
-            extra={
-                "file_name": safe_filename,
+        # Обрабатываем каждый файл
+        for file in files:
+            # Валидация типа файла
+            if file.content_type != "application/pdf":
+                logger.warning(
+                    "Invalid file type",
+                    extra={
+                        "file_name": file.filename,
+                        "content_type": file.content_type
+                    }
+                )
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Only PDF files are allowed. File '{file.filename}' has type '{file.content_type}'"
+                )
+            
+            # Валидация имени файла
+            if not file.filename:
+                logger.warning("Empty filename provided")
+                raise HTTPException(status_code=400, detail="Filename is required")
+            
+            # Очистка имени файла от опасных символов
+            safe_filename = file.filename.replace("..", "").replace("/", "").replace("\\", "")
+            if not safe_filename or safe_filename != file.filename:
+                logger.warning(
+                    "Invalid characters in filename",
+                    extra={
+                        "original_filename": file.filename,
+                        "safe_filename": safe_filename
+                    }
+                )
+                raise HTTPException(status_code=400, detail=f"Invalid file name: {file.filename}")
+            
+            # Убеждаемся, что файл имеет расширение .pdf
+            if not safe_filename.lower().endswith('.pdf'):
+                safe_filename = safe_filename.rsplit('.', 1)[0] + '.pdf'
+            
+            file_path = DOC_DIR / safe_filename
+            
+            # Проверка размера файла
+            file_content = await file.read()
+            file_size = len(file_content)
+            
+            if file_size > MAX_FILE_SIZE:
+                logger.warning(
+                    "File size exceeds limit",
+                    extra={
+                        "file_name": safe_filename,
+                        "file_size": file_size,
+                        "max_size": MAX_FILE_SIZE
+                    }
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File '{safe_filename}' size ({file_size / (1024*1024):.2f} MB) exceeds maximum allowed size of {MAX_FILE_SIZE / (1024*1024):.0f} MB"
+                )
+            
+            if file_size == 0:
+                logger.warning("Empty file uploaded", extra={"file_name": safe_filename})
+                raise HTTPException(status_code=400, detail=f"File '{safe_filename}' is empty")
+            
+            # Сохраняем файл
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            
+            safe_filenames.append(safe_filename)
+            saved_files.append({
+                "filename": safe_filename,
                 "file_path": str(file_path),
                 "file_size": file_size
+            })
+        
+        # Обработку файлов (парсинг и векторизация) выполняем в фоне
+        # передаем весь список файлов в парсер
+        background_tasks.add_task(parser, safe_filenames)
+        
+        total_size = sum(f["file_size"] for f in saved_files)
+        logger.info(
+            "Documents uploaded successfully, processing started in background",
+            extra={
+                "files_count": len(safe_filenames),
+                "total_size": total_size,
+                "files": safe_filenames
             }
         )
         
         return FileUploadResponse(
             success=True,
-            message="Document uploaded successfully. Processing started in background.",
-            filename=safe_filename,
-            file_path=str(file_path)
+            message=f"Successfully uploaded {len(safe_filenames)} document(s). Processing started in background.",
+            filename=", ".join(safe_filenames) if len(safe_filenames) <= 3 else f"{len(safe_filenames)} files",
+            file_path=str(DOC_DIR)
         )
     except HTTPException:
         raise
