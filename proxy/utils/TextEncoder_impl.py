@@ -24,23 +24,14 @@ class TextEmbedding:
         try:
             # Устанавливаем переменные окружения для оптимизации загрузки
             os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = '1'
+            os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Отключаем параллелизм токенизатора
             
             logger.info("Preparing model loading parameters...")
-            
-            # Оптимизация: используем локальный кэш и оптимизируем загрузку
-            # Для CPU используем float32, для CUDA - float16
-            model_kwargs = {
-                "dtype": torch.float16 if device == "cuda" else torch.float32,
-                "trust_remote_code": False,
-            }
-            
-            logger.info("Initializing SentenceTransformer...")
-            logger.info("This may take several minutes for large models on CPU...")
-            logger.info("Model is loading from cache, please wait...")
+            logger.info(f"PyTorch version: {torch.__version__}")
+            logger.info(f"Device: {device}")
             
             # Запускаем периодическое логирование в отдельном потоке
             self._loading = True
-            self._load_error = None
             
             def log_progress():
                 elapsed = 0
@@ -59,13 +50,25 @@ class TextEmbedding:
             progress_thread = threading.Thread(target=log_progress, daemon=True)
             progress_thread.start()
             
-            # Загружаем модель с явными параметрами
+            logger.info("Initializing SentenceTransformer...")
+            logger.info("Loading model (this may take 2-3 minutes on CPU)...")
+            
+            # Упрощенная загрузка без дополнительных параметров
+            # SentenceTransformer сам определит оптимальные настройки
             try:
-                self.embedding_model = SentenceTransformer(
-                    model_name,
-                    device=device,
-                    model_kwargs=model_kwargs
-                )
+                # Для CPU не передаем model_kwargs с dtype, чтобы избежать проблем
+                if device == "cuda":
+                    self.embedding_model = SentenceTransformer(
+                        model_name,
+                        device=device,
+                        model_kwargs={"torch_dtype": torch.float16}
+                    )
+                else:
+                    # Для CPU загружаем без дополнительных параметров
+                    self.embedding_model = SentenceTransformer(
+                        model_name,
+                        device=device
+                    )
             finally:
                 self._loading = False
             

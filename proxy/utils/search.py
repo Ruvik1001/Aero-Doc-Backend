@@ -43,7 +43,7 @@ def get_text_chunker():
 
 
 def poisk(query, name_db="rag_db", collec="docs"):
-    milvus = MilvusSingleton(host="localhost", port="19530")
+    milvus = MilvusSingleton(host="standalone", port="19530")
     milvus.setup_database(name_db)
 
     emb = get_embedding_model()
@@ -153,7 +153,7 @@ def push_milv(name_db="rag_db", collec="docs"):
     json_path = Path("files_chunks.json")
     rows = json.loads(json_path.read_text(encoding="utf-8"))
 
-    milvus = MilvusSingleton(host="localhost", port="19530")
+    milvus = MilvusSingleton(host="standalone", port="19530")
     milvus.setup_database(name_db)
 
     DIM = int(np.asarray(rows[0]["embeddings"]).size)
